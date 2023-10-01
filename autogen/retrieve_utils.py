@@ -52,7 +52,9 @@ def num_tokens_from_text(
         tokens_per_message = 3
         tokens_per_name = 1
     elif model == "gpt-3.5-turbo-0301":
-        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_message = 4  # every message follows <|im_start|>{role/name}
+{content}<|end|>
+
         tokens_per_name = -1  # if there's a name, the role is omitted
     elif "gpt-3.5-turbo" in model or "gpt-35-turbo" in model:
         logger.warning("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
@@ -60,6 +62,9 @@ def num_tokens_from_text(
     elif "gpt-4" in model:
         logger.warning("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
         return num_tokens_from_text(text, model="gpt-4-0613")
+    elif "text-davinci" in model or "text-embeddings" in model:
+        logger.warning("Warning: model may update over time. Returning num tokens assuming base model.")
+        return num_tokens_from_text(text, model="base")
     else:
         raise NotImplementedError(
             f"""num_tokens_from_text() is not implemented for model {model}. See """
@@ -84,7 +89,7 @@ def num_tokens_from_messages(messages: dict, model: str = "gpt-3.5-turbo-0613"):
             if key == "name":
                 num_tokens += tokens_per_name
         num_tokens += tokens_per_message
-    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    num_tokens += 3  # every reply is primed with <|im_start|>assistant<|im_sep|>
     return num_tokens
 
 
@@ -100,7 +105,8 @@ def split_text_to_chunks(
     if chunk_mode == "one_line":
         must_break_at_empty_line = False
     chunks = []
-    lines = text.split("\n")
+    lines = text.split("
+")
     lines_tokens = [num_tokens_from_text(line) for line in lines]
     sum_tokens = sum(lines_tokens)
     while sum_tokens > max_tokens:
@@ -114,11 +120,13 @@ def split_text_to_chunks(
             if must_break_at_empty_line and lines[cnt].strip() != "":
                 continue
             if sum(lines_tokens[:cnt]) <= max_tokens:
-                prev = "\n".join(lines[:cnt])
+                prev = "
+".join(lines[:cnt])
                 break
         if cnt == 0:
             logger.warning(
-                f"max_tokens is too small to fit a single line of text. Breaking this line:\n\t{lines[0][:100]} ..."
+                f"max_tokens is too small to fit a single line of text. Breaking this line:
+\t{lines[0][:100]} ..."
             )
             if not must_break_at_empty_line:
                 split_len = int(max_tokens / lines_tokens[0] * 0.9 * len(lines[0]))
@@ -132,7 +140,8 @@ def split_text_to_chunks(
         lines = lines[cnt:]
         lines_tokens = lines_tokens[cnt:]
         sum_tokens = sum(lines_tokens)
-    text_to_chunk = "\n".join(lines)
+    text_to_chunk = "
+".join(lines)
     chunks.append(text_to_chunk) if len(text_to_chunk) > 10 else None  # don't add chunks less than 10 characters
     return chunks
 
